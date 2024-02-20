@@ -223,6 +223,7 @@
     # ---------------
     sysprof
     firefox
+    ventoy-full
     spotify
     neofetch
     gh
