@@ -1,0 +1,283 @@
+# Edit this configuration file to define what should be installed on
+# your system.  Help is available in the configuration.nix(5) man page
+# and in the NixOS manual (accessible by running ‘nixos-help’).
+
+{
+  config,
+  pkgs,
+  lib,
+  ...
+}:
+let
+  nvidia-offload = pkgs.writeShellScriptBin "nvidia-offload" ''
+    export __NV_PRIME_RENDER_OFFLOAD=1
+    export __NV_PRIME_RENDER_OFFLOAD_PROVIDER=NVIDIA-G0
+    export __GLX_VENDOR_LIBRARY_NAME=nvidia
+    export __VK_LAYER_NV_optimus=NVIDIA_only
+    exec -a "$0" "$@"
+  '';
+in
+{
+  imports = [
+    # Include the results of the hardware scan.
+    ./hardware-configuration.nix
+  ];
+
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
+
+  # Bootloader.
+  boot.loader.systemd-boot.enable = true;
+  boot.loader.efi.canTouchEfiVariables = true;
+  boot.kernelPackages = pkgs.linuxPackages_zen;
+  boot.initrd.kernelModules = [ "nvidia" ];
+
+  systemd.extraConfig = ''
+    DefaultTimeoutStopSec=10s
+  '';
+
+  networking.hostName = lib.mkForce "anvil"; # Define your hostname.
+  # networking.wireless.enable = true;  # Enables wireless support via wpa_supplicant.
+
+  # Configure network proxy if necessary
+  # networking.proxy.default = "http://user:password@proxy:port/";
+  # networking.proxy.noProxy = "127.0.0.1,localhost,internal.domain";
+
+  # Enable networking
+  networking.networkmanager.enable = true;
+
+  # Set your time zone.
+  time.timeZone = "America/Chicago";
+
+  # Select internationalisation properties.
+  i18n.defaultLocale = "en_US.UTF-8";
+
+  i18n.extraLocaleSettings = {
+    LC_ADDRESS = "en_US.UTF-8";
+    LC_IDENTIFICATION = "en_US.UTF-8";
+    LC_MEASUREMENT = "en_US.UTF-8";
+    LC_MONETARY = "en_US.UTF-8";
+    LC_NAME = "en_US.UTF-8";
+    LC_NUMERIC = "en_US.UTF-8";
+    LC_PAPER = "en_US.UTF-8";
+    LC_TELEPHONE = "en_US.UTF-8";
+    LC_TIME = "en_US.UTF-8";
+  };
+
+  # Install Emacs
+  services.emacs = {
+    enable = true;
+    defaultEditor = true;
+    package = pkgs.emacs29-pgtk;
+  };
+
+  # Enable the X11 windowing system.
+  services.xserver.enable = true;
+  services.xserver.videoDrivers = [ "nvidia" ];
+
+  # Enable Gnome
+  services.xserver.displayManager.gdm = {
+    enable = true;
+  };
+  services.xserver.desktopManager.gnome.enable = true;
+  nixpkgs.overlays = [
+    (final: prev: {
+      gnome = prev.gnome.overrideScope' (
+        gnomeFinal: gnomePrev: {
+          mutter = gnomePrev.mutter.overrideAttrs (
+            old: {
+              src = pkgs.fetchgit {
+                url = "https://gitlab.gnome.org/vanvugt/mutter.git";
+                # GNOME 45: triple-buffering-v4-45
+                rev = "0b896518b2028d9c4d6ea44806d093fd33793689";
+                sha256 = "sha256-mzNy5GPlB2qkI2KEAErJQzO//uo8yO0kPQUwvGDwR4w=";
+              };
+            }
+          );
+        }
+      );
+    })
+  ];
+  # nixpkgs.config.allowAliases = false;
+
+  # Load nvidia driver for Xorg and Wayland
+  hardware.nvidia = {
+    modesetting.enable = true;
+    powerManagement.enable = false;
+    powerManagement.finegrained = false;
+    open = false;
+    nvidiaSettings = true;
+    
+    package = config.boot.kernelPackages.nvidiaPackages.beta;
+    forceFullCompositionPipeline = true;
+  };
+
+  hardware.nvidia.prime = {
+    # offload = {
+    #   enable = true;
+    #   enableOffloadCmd = true;
+    # };
+    sync.enable = true;
+    intelBusId = "PCI:0:2:0";
+    nvidiaBusId = "PCI:1:0:0";
+  };
+  hardware.opengl = {
+    enable = true;
+    driSupport = true;
+    driSupport32Bit = true;
+  };
+
+  services.thermald.enable = lib.mkDefault true;
+
+  # Configure keymap in X11
+  services.xserver.layout = "us";
+
+  # Enable CUPS to print documents.
+  services.printing.enable = true;
+
+  # Define a user account. Don't forget to set a password with ‘passwd’.
+  users.users.ilyas = {
+    isNormalUser = true;
+    description = "ilyas";
+    extraGroups = [
+      "networkmanager"
+      "wheel"
+    ];
+  };
+
+  # Allow unfree packages
+  nixpkgs.config.allowUnfree = true;
+
+  services.flatpak.enable = true;
+
+  # List packages installed in system profile. To search, run:
+  environment.systemPackages = with pkgs; [
+    # Doom Emacs dependencies
+    fd
+    (ripgrep.override { withPCRE2 = true; })
+    # Programs required by Doctor Doom (emacs)
+    gnumake
+    cmake
+    glslang
+    sbcl
+    haskell-language-server
+    haskellPackages.hoogle
+    haskellPackages.cabal-install
+    jdk21
+    python311Packages.isort
+    pipenv
+    python311Packages.nose3
+    python311Packages.pytest
+    python311Packages.setuptools
+    emacsPackages.flymake-shellcheck
+    emacsPackages.pandoc
+    ruby_3_3
+    html-tidy
+    stylelint
+    jsbeautifier
+    # --------------
+    toybox
+    google-chrome
+    qemu_kvm
+    firefox
+    alacritty
+    neofetch
+    gh
+    curl
+    gnome-extension-manager
+    helix
+    nerdfonts
+    eza
+    btop
+    mullvad-browser
+    evince
+    zotero
+    libreoffice
+    thunderbird
+    helix
+    racket
+    python3
+    nurl
+    distrobox
+    python311Packages.pip
+    wget
+    lazygit
+    zoxide
+    oh-my-posh
+    powershell
+    pinta
+    inkscape
+    mpv
+    jellyfin-media-player
+    yt-dlp
+    qbittorrent
+    ffmpeg
+    nnn
+    lshw
+    xsct
+    maiko # Medley Interlisp virtual machine
+    tldr
+    shortwave
+    audacity
+    simh
+    etcher
+    clinfo
+    gpu-viewer
+    glxinfo
+    vulkan-tools
+    nixfmt-rfc-style
+    gnomeExtensions.appindicator
+    gnome.adwaita-icon-theme
+    gnomeExtensions.pop-shell
+    mission-center
+    gnomeExtensions.easyeffects-preset-selector
+    nvidia-offload
+  ];
+
+  nixpkgs.config.permittedInsecurePackages = [ "electron-19.1.9" ];
+
+  # Some programs need SUID wrappers, can be configured further or are
+  # started in user sessions.
+  programs.mtr.enable = true;
+  programs.gnupg.agent = {
+    enable = true;
+    enableSSHSupport = true;
+  };
+
+  hardware.pulseaudio.enable = lib.mkForce false;
+  sound.enable = lib.mkDefault false;
+  # rtkit is optional but recommended
+  security.rtkit.enable = true;
+  services.pipewire = {
+    enable = true;
+    alsa.enable = lib.mkForce true;
+    alsa.support32Bit = true;
+    pulse.enable = true;
+    # If you want to use JACK applications, uncomment this
+    #jack.enable = true;
+  };
+
+  #Virtual Machines and Containers
+  virtualisation.podman.enable = true;
+
+  # List services that you want to enable:
+
+  # Enable the OpenSSH daemon.
+  services.openssh.enable = true;
+
+  # Open ports in the firewall.
+  # networking.firewall.allowedTCPPorts = [ ... ];
+  # networking.firewall.allowedUDPPorts = [ ... ];
+  # Or disable the firewall altogether.
+  # networking.firewall.enable = false;
+
+  # This value determines the NixOS release from which the default
+  # settings for stateful data, like file locations and database versions
+  # on your system were taken. It‘s perfectly fine and recommended to leave
+  # this value at the release version of the first install of this system.
+  # Before changing this value read the documentation for this option
+  # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
+  system.stateVersion = "23.11"; # Did you read the comment?
+}
